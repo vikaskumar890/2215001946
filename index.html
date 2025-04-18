@@ -1,0 +1,473 @@
+<script type="text/javascript">
+    var gk_isXlsx = false;
+    var gk_xlsxFileLookup = {};
+    var gk_fileData = {};
+    function filledCell(cell) {
+      return cell !== '' && cell != null;
+    }
+    function loadFileData(filename) {
+    if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+        try {
+            var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+            var firstSheetName = workbook.SheetNames[0];
+            var worksheet = workbook.Sheets[firstSheetName];
+
+            // Convert sheet to JSON to filter blank rows
+            var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+            // Filter out blank rows (rows where all cells are empty, null, or undefined)
+            var filteredData = jsonData.filter(row => row.some(filledCell));
+
+            // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+            var headerRowIndex = filteredData.findIndex((row, index) =>
+              row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+            );
+            // Fallback
+            if (headerRowIndex === -1 || headerRowIndex > 25) {
+              headerRowIndex = 0;
+            }
+
+            // Convert filtered JSON back to CSV
+            var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+            csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+            return csv;
+        } catch (e) {
+            console.error(e);
+            return "";
+        }
+    }
+    return gk_fileData[filename] || "";
+    }
+    </script><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Social Media Analytics</title>
+<script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.9/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<style>
+.gradient-bg { background: linear-gradient(135deg, #6B7280, #3B82F6); }
+.card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+.card-hover:hover { transform: translateY(-5px); box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+
+const mockUsers = [
+  "John Doe", "Helen Moore", "Ivy Taylor", "Jack Anderson", "Kathy Thomas", "Liam Jackson",
+  "Mona Harris", "Nathan Clark", "Olivia Lewis", "Paul Walker", "Quinn Scott", "Jane Doe",
+  "Rachel Young", "Alice Smith", "Bob Johnson", "Charlie Brown", "Diana White", "Edward Davis",
+  "Fiona Miller", "George Wilson"
+];
+
+const mockPosts = [
+  { id: 246, userid: 1, content: "Post about ant" },
+  { id: 161, userid: 1, content: "Post about elephant" }
+];
+
+const mockComments = [
+  { id: 3893, postid: 150, content: "Old comment" },
+  { id: 4791, postid: 150, content: "Boring comment" }
+];
+
+
+const mockAnalytics = {
+  followers: 15230,
+  followerGrowth: [
+    { date: '2025-04-01', count: 14500 },
+    { date: '2025-04-02', count: 14620 },
+    { date: '2025-04-03', count: 14750 },
+    { date: '2025-04-04', count: 14890 },
+    { date: '2025-04-05', count: 15000 },
+    { date: '2025-04-06', count: 15120 },
+    { date: '2025-04-07', count: 15230 },
+  ],
+  engagementRate: 5.2,
+  posts: [
+    { id: 1, content: 'New product launch!', likes: 450, comments: 60, shares: 20, date: '2025-04-06', image: 'https://via.placeholder.com/150' },
+    { id: 2, content: 'Team meeting highlights', likes: 210, comments: 28, shares: 10, date: '2025-04-05', image: 'https://via.placeholder.com/150' },
+    { id: 3, content: 'Customer success story', likes: 320, comments: 35, shares: 18, date: '2025-04-04', image: 'https://via.placeholder.com/150' },
+    { id: 4, content: 'Behind-the-scenes video', likes: 380, comments: 42, shares: 15, date: '2025-04-03', image: 'https://via.placeholder.com/150' },
+  ],
+  demographics: {
+    ageGroups: [
+      { range: '18-24', percentage: 35 },
+      { range: '25-34', percentage: 40 },
+      { range: '35-44', percentage: 15 },
+      { range: '45+', percentage: 10 },
+    ],
+    gender: { male: 45, female: 50, other: 5 },
+  },
+  topPosts: [
+    { id: 1, content: 'New product launch!', engagement: 530 },
+    { id: 4, content: 'Behind-the-scenes video', engagement: 437 },
+  ],
+};
+
+// Error Boundary Component
+class ErrorBoundary extends React.Component {
+  state = { hasError: false };
+  static getDerivedStateFromError(error) {
+    console.error('Error caught in ErrorBoundary:', error);
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return <div className="p-8 text-red-600">Something went wrong. Please try again later.</div>;
+    }
+    return this.props.children;
+  }
+}
+
+// Sidebar Component
+function Sidebar({ setActiveSection }) {
+  const sections = [
+    { name: 'Overview', id: 'overview' },
+    { name: 'Post Performance', id: 'posts' },
+    { name: 'Audience Demographics', id: 'demographics' },
+    { name: 'Top Posts', id: 'topPosts' },
+    { name: 'Users', id: 'users' },
+    { name: 'Posts', id: 'allPosts' },
+    { name: 'Comments', id: 'comments' },
+  ];
+
+  return (
+    <div className="w-64 bg-gray-900 text-white h-screen fixed shadow-lg">
+      <div className="p-6 text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600">
+        Analytics Hub
+      </div>
+      <nav className="mt-4">
+        <ul>
+          {sections.map(section => (
+            <li key={section.id}>
+              <button
+                className="block w-full text-left p-4 hover:bg-gray-700 transition-colors duration-200"
+                onClick={() => setActiveSection(section.id)}
+              >
+                {section.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </div>
+  );
+}
+
+
+function FollowerGrowthChart({ data }) {
+  const canvasRef = React.useRef(null);
+  useEffect(() => {
+    try {
+      const ctx = canvasRef.current.getContext('2d');
+      const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.map(item => item.date),
+          datasets: [{
+            label: 'Followers',
+            data: data.map(item => item.count),
+            borderColor: '#10B981',
+            backgroundColor: 'rgba(16, 185, 129, 0.3)',
+            fill: true,
+            tension: 0.4,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: { enabled: true },
+          },
+          scales: {
+            x: { title: { display: true, text: 'Date', color: '#374151' } },
+            y: { title: { display: true, text: 'Followers', color: '#374151' } },
+          },
+        },
+      });
+      return () => chart.destroy();
+    } catch (error) {
+      console.error('Error rendering FollowerGrowthChart:', error);
+    }
+  }, [data]);
+
+  return <canvas ref={canvasRef} className="w-full h-80"></canvas>;
+}
+
+
+function DemographicsChart({ data }) {
+  const canvasRef = React.useRef(null);
+  useEffect(() => {
+    try {
+      const ctx = canvasRef.current.getContext('2d');
+      const chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.ageGroups.map(item => item.range),
+          datasets: [{
+            label: 'Audience Distribution',
+            data: data.ageGroups.map(item => item.percentage),
+            backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'],
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+          },
+          scales: {
+            y: { title: { display: true, text: 'Percentage (%)' } },
+          },
+        },
+      });
+      return () => chart.destroy();
+    } catch (error) {
+      console.error('Error rendering DemographicsChart:', error);
+    }
+  }, [data]);
+
+  return <canvas ref={canvasRef} className="w-full h-64"></canvas>;
+}
+
+
+function DateRangePicker() {
+  return (
+    <div className="flex items-center space-x-4">
+      <select className="p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option>Last 7 Days</option>
+        <option>Last 30 Days</option>
+        <option>Last 90 Days</option>
+      </select>
+      <span className="text-gray-600">Showing data for April 1-7, 2025</span>
+    </div>
+  );
+}
+
+
+function Overview({ data }) {
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">Analytics Overview</h2>
+        <DateRangePicker />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-lg shadow-lg card-hover">
+          <h3 className="text-lg font-semibold text-gray-700">Total Followers</h3>
+          <p className="text-4xl font-bold text-blue-600">{data.followers.toLocaleString()}</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow-lg card-hover">
+          <h3 className="text-lg font-semibold text-gray-700">Engagement Rate</h3>
+          <p className="text-4xl font-bold text-green-600">{data.engagementRate}%</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow-lg card-hover">
+          <h3 className="text-lg font-semibold text-gray-700">Total Posts</h3>
+          <p className="text-4xl font-bold text-yellow-600">{data.posts.length}</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow-lg card-hover">
+          <h3 className="text-lg font-semibold text-gray-700">Avg. Post Engagement</h3>
+          <p className="text-4xl font-bold text-red-600">
+            {Math.round(data.posts.reduce((sum, p) => sum + p.likes + p.comments + p.shares, 0) / data.posts.length)}
+          </p>
+        </div>
+      </div>
+      <div className="mt-8 bg-white p-6 rounded-lg shadow-lg">
+        <h3 className="text-xl font-semibold text-gray-700 mb-4">Follower Growth</h3>
+        <FollowerGrowthChart data={data.followerGrowth} />
+      </div>
+    </div>
+  );
+}
+
+
+function PostPerformance({ posts }) {
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">Post Performance</h2>
+        <DateRangePicker />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {posts.map(post => (
+          <div key={post.id} className="bg-white p-6 rounded-lg shadow-lg card-hover">
+            <img src={post.image} alt="Post" className="w-full h-32 object-cover rounded-lg mb-4" />
+            <p className="text-gray-600 text-sm">{post.date}</p>
+            <p className="font-semibold text-gray-800">{post.content}</p>
+            <div className="flex space-x-4 mt-2 text-gray-600">
+              <span>❤️ {post.likes}</span>
+              <span>💬 {post.comments}</span>
+              <span>🔄 {post.shares}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function AudienceDemographics({ data }) {
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">Audience Demographics</h2>
+        <DateRangePicker />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-lg shadow-lg card-hover">
+          <h3 className="text-xl font-semibold text-gray-700 mb-4">Age Distribution</h3>
+          <DemographicsChart data={data} />
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow-lg card-hover">
+          <h3 className="text-xl font-semibold text-gray-700 mb-4">Gender Distribution</h3>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between">
+                <span>Male</span>
+                <span>{data.gender.male}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${data.gender.male}%` }}></div>
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between">
+                <span>Female</span>
+                <span>{data.gender.female}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div className="bg-pink-500 h-2.5 rounded-full" style={{ width: `${data.gender.female}%` }}></div>
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between">
+                <span>Other</span>
+                <span>{data.gender.other}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div className="bg-purple-500 h-2.5 rounded-full" style={{ width: `${data.gender.other}%` }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TopPosts({ posts }) {
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">Top Posts by Engagement</h2>
+        <DateRangePicker />
+      </div>
+      <div className="space-y-6">
+        {posts.map(post => (
+          <div key={post.id} className="bg-white p-6 rounded-lg shadow-lg card-hover">
+            <p className="font-semibold text-gray-800">{post.content}</p>
+            <p className="text-gray-600">Total Engagement: {post.engagement}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function Users({ users }) {
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">Registered Users</h2>
+        <DateRangePicker />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {users.map((user, index) => (
+          <div key={index} className="bg-white p-4 rounded-lg shadow-lg card-hover">
+            <p className="text-gray-800">{user}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function AllPosts({ posts }) {
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">All Posts</h2>
+        <DateRangePicker />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {posts.map(post => (
+          <div key={post.id} className="bg-white p-6 rounded-lg shadow-lg card-hover">
+            <p className="text-gray-600 text-sm">User ID: {post.userid}</p>
+            <p className="font-semibold text-gray-800">{post.content}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function Comments({ comments }) {
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-gray-800">Comments</h2>
+        <DateRangePicker />
+      </div>
+      <div className="space-y-4">
+        {comments.map(comment => (
+          <div key={comment.id} className="bg-white p-6 rounded-lg shadow-lg card-hover">
+            <p className="text-gray-600 text-sm">Post ID: {comment.postid}</p>
+            <p className="font-semibold text-gray-800">{comment.content}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function App() {
+  const [activeSection, setActiveSection] = useState('overview');
+
+  return (
+    <ErrorBoundary>
+      <div className="flex gradient-bg min-h-screen">
+        <Sidebar setActiveSection={setActiveSection} />
+        <div className="ml-64 flex-1 bg-gray-100 min-h-screen">
+          {activeSection === 'overview' && <Overview data={mockAnalytics} />}
+          {activeSection === 'posts' && <PostPerformance posts={mockAnalytics.posts} />}
+          {activeSection === 'demographics' && <AudienceDemographics data={mockAnalytics.demographics} />}
+          {activeSection === 'topPosts' && <TopPosts posts={mockAnalytics.topPosts} />}
+          {activeSection === 'users' && <Users users={mockUsers} />}
+          {activeSection === 'allPosts' && <AllPosts posts={mockPosts} />}
+          {activeSection === 'comments' && <Comments comments={mockComments} />}
+        </div>
+      </div>
+    </ErrorBoundary>
+  );
+}
+
+
+try {
+  ReactDOM.render(<App />, document.getElementById('root'));
+} catch (error) {
+  console.error('Error rendering App:', error);
+}
+</script>
+</body>
+</html>
